@@ -1,0 +1,53 @@
+name: PixelBloom CI
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Start disposable Supabase
+        run: npx --yes supabase@2.122.1 start --exclude studio,imgproxy,edge-runtime,logflare,vector,realtime,postgres-meta,supavisor > /tmp/pixelbloom-supabase.log 2>&1
+      - name: Run PostgreSQL authorization checks
+        run: |
+          for fixture in tests/security/*.sql; do
+            docker exec -i supabase_db_pixelbloom psql -X --quiet --username postgres --dbname postgres --set ON_ERROR_STOP=1 < "$fixture" > /dev/null
+          done
+      - run: npx playwright install --with-deps chromium
+      - name: Exercise real Auth and clinic workflow
+        env:
+          PIXELBLOOM_E2E_LOCAL: "1"
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+        run: |
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$(npx --yes supabase@2.122.1 status --output json | jq -er .PUBLISHABLE_KEY)
+          export NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+          npm run test:e2e -- --workers=1
+      - name: Stop disposable Supabase
+        if: always()
+        run: npx --yes supabase@2.122.1 stop

@@ -1,0 +1,22 @@
+project_id = "pixelbloom"
+
+[db]
+major_version = 17
+
+[auth]
+minimum_password_length = 12
+site_url = "http://localhost:3000"
+additional_redirect_urls = [
+  "http://localhost:3000/auth/callback?flow=signup",
+  "http://localhost:3000/auth/callback?flow=recovery"
+]
+
+[auth.email]
+enable_confirmations = true
+max_frequency = "1s"
+
+[auth.rate_limit]
+email_sent = 20
+
+[db.seed]
+enabled = false
